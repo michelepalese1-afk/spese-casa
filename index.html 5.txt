@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="it" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CasaBudget - Spese Michele & Irene</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Firebase SDK (v9 Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 font-sans min-h-full transition-colors duration-200">
+
+    <!-- HEADER / NAVBAR -->
+    <header class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400 rounded-xl">
+                    <i data-lucide="home" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
+                        CasaBudget
+                        <span class="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 font-semibold px-2 py-0.5 rounded-full">Michele & Irene</span>
+                    </h1>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Ripartizione spese per micro-aree</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2 sm:space-x-4">
+                <!-- Stanza Status Indicator -->
+                <button onclick="openSyncModal()" title="Configura Sincronizzazione Firebase" class="flex items-center space-x-2 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 transition">
+                    <span id="sync-status-dot" class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                    <span id="sync-status-text" class="hidden sm:inline font-medium">Stanza: Locale</span>
+                    <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+                </button>
+
+                <!-- Dark Mode Toggle -->
+                <button id="theme-toggle" onclick="toggleTheme()" title="Cambia Tema" class="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                    <i data-lucide="moon" class="w-5 h-5 hidden dark:block"></i>
+                    <i data-lucide="sun" class="w-5 h-5 block dark:hidden"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- CONTAINER PRINCIPALE -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- SINTESI BILANCIO & CONTO PAREGGIO -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Totale Mese -->
+            <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700/60 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-400">Spesa Totale Casa</p>
+                    <h3 id="stat-total" class="text-2xl font-black text-gray-900 dark:text-white mt-1">€0.00</h3>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1" id="stat-count">0 spese registrate</p>
+                </div>
+                <div class="p-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl">
+                    <i data-lucide="receipt" class="w-7 h-7"></i>
+                </div>
+            </div>
+
+            <!-- Pagato da Michele vs Irene -->
+            <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700/60 flex items-center justify-between">
+                <div class="w-full">
+                    <p class="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-400">Anticipi da noi</p>
+                    <div class="flex justify-between items-center mt-2">
+                        <span class="text-sm font-semibold text-blue-600 dark:text-blue-400">Michele: <span id="stat-michele">€0.00</span></span>
+                        <span class="text-sm font-semibold text-purple-600 dark:text-purple-400">Irene: <span id="stat-irene">€0.00</span></span>
+                    </div>
+                    <!-- Mini progress bar -->
+                    <div class="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full mt-2 overflow-hidden flex">
+                        <div id="bar-michele" class="bg-blue-500 h-full transition-all duration-300" style="width: 50%"></div>
+                        <div id="bar-irene" class="bg-purple-500 h-full transition-all duration-300" style="width: 50%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CONGUAGLIO / CHI DEVE A CHI -->
+            <div id="settlement-card" class="bg-gradient-to-br from-green-500 to-emerald-700 text-white p-5 rounded-2xl shadow-md flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-green-100">Bilancio di Coppia</span>
+                        <i data-lucide="scale" class="w-5 h-5 text-green-200"></i>
+                    </div>
+                    <div id="settlement-text" class="mt-2 text-lg font-bold leading-snug">
+                        Tutto pari! Nessun debito pendente.
+                    </div>
+                </div>
+                <div class="mt-3 text-xs text-green-100 bg-white/10 p-2 rounded-lg backdrop-blur-sm" id="settlement-detail">
+                    Le spese comuni sono suddivise perfettamente al 50%.
+                </div>
+            </div>
+        </div>
+
+        <!-- AZIONI RAPIDE E FILTRI -->
+        <div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+            <div class="flex items-center space-x-2">
+                <button onclick="openExpenseModal()" class="flex-1 sm:flex-none flex items-center justify-center space-x-2 bg-brand-600 hover:bg-brand-700 text-white font-medium px-4 py-2.5 rounded-xl shadow-sm transition">
+                    <i data-lucide="plus-circle" class="w-5 h-5"></i>
+                    <span>Nuova Spesa</span>
+                </button>
+                <button onclick="openAreaModal()" class="flex-1 sm:flex-none flex items-center justify-center space-x-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium px-4 py-2.5 rounded-xl transition">
+                    <i data-lucide="grid" class="w-5 h-5"></i>
+                    <span>Micro-Aree</span>
+                </button>
+            </div>
+
+            <div class="flex items-center space-x-2">
+                <!-- Filtro Mese -->
+                <select id="filter-month" onchange="renderApp()" class="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg p-2.5 focus:ring-brand-500 focus:border-brand-500">
+                    <!-- Popolato dinamicamente -->
+                </select>
+
+                <!-- Export CSV -->
+                <button onclick="exportCSV()" title="Esporta CSV" class="p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition">
+                    <i data-lucide="file-spread-sheet" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- CONTENUTO PRINCIPALE A 2 COLONNE -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- TABELLA / LISTA SPESE (2 Colonne su Desktop) -->
+            <div class="lg:col-span-2 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700/60 overflow-hidden flex flex-col">
+                <div class="p-4 sm:p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <i data-lucide="list" class="w-5 h-5 text-brand-600"></i>
+                        Elenco Spese
+                    </h2>
+                    <span id="expense-count-badge" class="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-medium px-2.5 py-1 rounded-full">0 spese</span>
+                </div>
+
+                <div class="divide-y divide-gray-100 dark:divide-gray-700/50 overflow-y-auto max-h-[500px]" id="expenses-list">
+                    <!-- Spese inserite qui dinamicamente -->
+                </div>
+            </div>
+
+            <!-- GRAFICO MICRO-AREE & RIPARTIZIONE (1 Colonna su Desktop) -->
+            <div class="space-y-6">
+                <!-- Grafico a Torta -->
+                <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700/60">
+                    <h3 class="text-md font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <i data-lucide="pie-chart" class="w-5 h-5 text-brand-600"></i>
+                        Spese per Micro-Area
+                    </h3>
+                    <div class="relative h-56 flex justify-center items-center">
+                        <canvas id="areasChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Dettaglio Micro-Aree Casa -->
+                <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700/60">
+                    <h3 class="text-md font-bold text-gray-900 dark:text-white mb-3">Micro-Aree Attive</h3>
+                    <div id="areas-summary-list" class="space-y-2">
+                        <!-- Popolato dinamicamente -->
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- MODALE AGGIUNGI / MODIFICA SPESA -->
+    <div id="modal-expense" class="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700 space-y-4">
+            <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-700 pb-3">
+                <h3 id="modal-expense-title" class="text-lg font-bold text-gray-900 dark:text-white">Nuova Spesa di Casa</h3>
+                <button onclick="closeExpenseModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+
+            <form id="form-expense" onsubmit="handleSaveExpense(event)" class="space-y-4">
+                <input type="hidden" id="expense-id">
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Descrizione</label>
+                    <input type="text" id="expense-desc" required placeholder="Es. Spesa Esselunga, Bolletta Luce..." class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl p-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Importo (€)</label>
+                        <input type="number" step="0.01" min="0.01" id="expense-amount" required placeholder="0.00" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl p-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Data</label>
+                        <input type="date" id="expense-date" required class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl p-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Micro-Area Casa</label>
+                    <select id="expense-area" required class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl p-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none">
+                        <!-- Opzioni caricate dinamicamente -->
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Pagato da</label>
+                        <select id="expense-payer" required class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl p-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none">
+                            <option value="Michele">Michele</option>
+                            <option value="Irene">Irene</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Ripartizione</label>
+                        <select id="expense-split" required class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl p-2.5 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none">
+                            <option value="50-50">Diviso 50% / 50%</option>
+                            <option value="100-Michele">100% Michele</option>
+                            <option value="100-Irene">100% Irene</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="pt-3 flex justify-end space-x-2">
+                    <button type="button" onclick="closeExpenseModal()" class="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl">Annulla</button>
+                    <button type="submit" class="px-5 py-2 text-sm bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-xl shadow-sm">Salva Spesa</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODALE GESTIONE MICRO-AREE -->
+    <div id="modal-areas" class="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700 space-y-4">
+            <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-700 pb-3">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white">Gestisci Micro-Aree</h3>
+                <button onclick="closeAreaModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+
+            <!-- Form Aggiunta Micro Area -->
+            <form id="form-area" onsubmit="handleSaveArea(event)" class="flex gap-2">
+                <input type="text" id="area-name" placeholder="Nuova Micro-Area (es. Giardino)" required class="flex-1 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl p-2.5 text-sm text-gray-900 dark:text-white outline-none">
+                <input type="color" id="area-color" value="#3b82f6" class="w-10 h-10 p-1 bg-transparent rounded-xl cursor-pointer">
+                <button type="submit" class="bg-brand-600 hover:bg-brand-700 text-white font-medium px-4 rounded-xl text-sm">Aggiungi</button>
+            </form>
+
+            <div class="divide-y divide-gray-100 dark:divide-gray-700 max-h-60 overflow-y-auto" id="areas-management-list">
+                <!-- Lista aree gestibili -->
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALE CONFIGURAZIONE FIREBASE / SINCRONIZZAZIONE -->
+    <div id="modal-sync" class="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700 space-y-4">
+            <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-700 pb-3">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <i data-lucide="wifi" class="w-5 h-5 text-brand-600"></i>
+                    Sincronizzazione Live (Firebase)
+                </h3>
+                <button onclick="closeSyncModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+
+            <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                Inserisci qui le chiavi del tuo Firebase Realtime Database per fare in modo che Michele e Irene vedano le spese in tempo reale da telefoni o PC diversi.
+            </p>
+
+            <div class="space-y-3 text-sm">
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Codice Stanza Casa</label>
+                    <input type="text" id="firebase-room" placeholder="es. CASA-MICHELE-IRENE" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl p-2.5 text-gray-900 dark:text-white font-mono text-sm">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">Database URL (Firebase)</label>
+                    <input type="text" id="firebase-dburl" placeholder="https://tuo-progetto-default-rtdb.europe-west1.firebasedatabase.app" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl p-2.5 text-gray-900 dark:text-white text-xs">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-1">API Key (Firebase)</label>
+                    <input type="text" id="firebase-apikey" placeholder="AIzaSy..." class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl p-2.5 text-gray-900 dark:text-white text-xs">
+                </div>
+            </div>
+
+            <div class="pt-3 flex justify-between items-center">
+                <button type="button" onclick="resetFirebaseConfig()" class="text-xs text-red-500 hover:underline">Disattiva Sync</button>
+                <div class="flex space-x-2">
+                    <button type="button" onclick="closeSyncModal()" class="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl">Annulla</button>
+                    <button type="button" onclick="saveFirebaseConfig()" class="px-5 py-2 text-sm bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-xl shadow-sm">Collega e Salva</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOGICA JAVASCRIPT -->
+    <script>
+        // CONFIGURAZIONE DI BASE & DEFAULT MICRO-AREE
+        const DEFAULT_AREAS = [
+            { id: 'area-1', name: 'Cucina & Spesa', color: '#ef4444', icon: 'shopping-cart' },
+            { id: 'area-2', name: 'Bollette & Utenze', color: '#f59e0b', icon: 'zap' },
+            { id: 'area-3', name: 'Affitto & Casa', color: '#3b82f6', icon: 'home' },
+            { id: 'area-4', name: 'Bagno & Pulizia', color: '#06b6d4', icon: 'droplet' },
+            { id: 'area-5', name: 'Svago & Coppia', color: '#8b5cf6', icon: 'heart' }
+        ];
+
+        // STATO APPLICAZIONE
+        let state = {
+            expenses: [],
+            areas: [],
+            firebaseConfig: null,
+            dbRef: null
+        };
+
+        let areasChartInstance = null;
+
+        // INIZIALIZZAZIONE
+        window.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            loadLocalData();
+            initFirebaseIfConfigured();
+            populateMonthFilter();
+            renderApp();
+            lucide.createIcons();
+        });
+
+        // TEMA CHIARO/SCURO
+        function initTheme() {
+            if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        }
+
+        function toggleTheme() {
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                localStorage.theme = 'light';
+            } else {
+                document.documentElement.classList.add('dark');
+                localStorage.theme = 'dark';
+            }
+        }
+
+        // CARICAMENTO DATI LOCALSTORAGE
+        function loadLocalData() {
+            const savedAreas = localStorage.getItem('casabudget_areas');
+            state.areas = savedAreas ? JSON.parse(savedAreas) : DEFAULT_AREAS;
+
+            const savedExpenses = localStorage.getItem('casabudget_expenses');
+            state.expenses = savedExpenses ? JSON.parse(savedExpenses) : [];
+
+            const savedFb = localStorage.getItem('casabudget_fb_config');
+            if (savedFb) {
+                state.firebaseConfig = JSON.parse(savedFb);
+            }
+        }
+
+        function saveLocalData() {
+            localStorage.setItem('casabudget_areas', JSON.stringify(state.areas));
+            localStorage.setItem('casabudget_expenses', JSON.stringify(state.expenses));
+            if (state.dbRef) {
+                state.dbRef.set({
+                    expenses: state.expenses,
+                    areas: state.areas
+                });
+            }
+        }
+
+        // FIREBASE SYNC
+        function initFirebaseIfConfigured() {
+            if (state.firebaseConfig && state.firebaseConfig.apiKey && state.firebaseConfig.databaseURL) {
+                try {
+                    if (!firebase.apps.length) {
+                        firebase.initializeApp({
+                            apiKey: state.firebaseConfig.apiKey,
+                            databaseURL: state.firebaseConfig.databaseURL
+                        });
+                    }
+                    const room = state.firebaseConfig.room || 'CASA-DEFAULT';
+                    state.dbRef = firebase.database().ref('rooms/' + room);
+
+                    state.dbRef.on('value', (snapshot) => {
+                        const data = snapshot.val();
+                        if (data) {
+                            if (data.expenses) state.expenses = data.expenses;
+                            if (data.areas) state.areas = data.areas;
+                            renderApp();
+                        }
+                    });
+
+                    document.getElementById('sync-status-dot').className = 'w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse';
+                    document.getElementById('sync-status-text').innerText = `Sync: ${room}`;
+                } catch (e) {
+                    console.error('Errore connesione Firebase:', e);
+                }
+            }
+        }
+
+        function saveFirebaseConfig() {
+            const room = document.getElementById('firebase-room').value.trim() || 'CASA-DEFAULT';
+            const databaseURL = document.getElementById('firebase-dburl').value.trim();
+            const apiKey = document.getElementById('firebase-apikey').value.trim();
+
+            if (!databaseURL || !apiKey) {
+                alert('Inserisci sia l\'URL del Database che l\'API Key di Firebase.');
+                return;
+            }
+
+            state.firebaseConfig = { room, databaseURL, apiKey };
+            localStorage.setItem('casabudget_fb_config', JSON.stringify(state.firebaseConfig));
+            closeSyncModal();
+            location.reload();
+        }
+
+        function resetFirebaseConfig() {
+            localStorage.removeItem('casabudget_fb_config');
+            location.reload();
+        }
+
+        // POPOLA FILTRO MESI
+        function populateMonthFilter() {
+            const select = document.getElementById('filter-month');
+            select.innerHTML = '<option value="ALL">Tutti i mesi</option>';
+
+            const now = new Date();
+            const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+            // Trova tutti i mesi presenti
+            const months = new Set([currentYearMonth]);
+            state.expenses.forEach(e => {
+                if (e.date) months.add(e.date.substring(0, 7));
+            });
+
+            Array.from(months).sort().reverse().forEach(m => {
+                const [year, month] = m.split('-');
+                const monthName = new Date(year, month - 1).toLocaleString('it', { month: 'long', year: 'numeric' });
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.innerText = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+                if (m === currentYearMonth) opt.selected = true;
+                select.appendChild(opt);
+            });
+        }
+
+        // RENDER GENERALE
+        function renderApp() {
+            const selectedMonth = document.getElementById('filter-month').value || 'ALL';
+            
+            // Filtra spese
+            const filteredExpenses = state.expenses.filter(e => {
+                if (selectedMonth === 'ALL') return true;
+                return e.date && e.date.startsWith(selectedMonth);
+            });
+
+            // STATISTICHE
+            let totalSum = 0;
+            let michelePaid = 0;
+            let irenePaid = 0;
+
+            let micheleOwes = 0;
+            let ireneOwes = 0;
+
+            filteredExpenses.forEach(e => {
+                const amount = parseFloat(e.amount) || 0;
+                totalSum += amount;
+
+                if (e.payer === 'Michele') michelePaid += amount;
+                if (e.payer === 'Irene') irenePaid += amount;
+
+                // Calcolo debiti/quote
+                if (e.split === '50-50') {
+                    micheleOwes += amount / 2;
+                    ireneOwes += amount / 2;
+                } else if (e.split === '100-Michele') {
+                    micheleOwes += amount;
+                } else if (e.split === '100-Irene') {
+                    ireneOwes += amount;
+                }
+            });
+
+            document.getElementById('stat-total').innerText = `€${totalSum.toFixed(2)}`;
+            document.getElementById('stat-count').innerText = `${filteredExpenses.length} spese in questo periodo`;
+
+            document.getElementById('stat-michele').innerText = `€${michelePaid.toFixed(2)}`;
+            document.getElementById('stat-irene').innerText = `€${irenePaid.toFixed(2)}`;
+
+            const totalPaid = michelePaid + irenePaid;
+            const michelePct = totalPaid > 0 ? (michelePaid / totalPaid) * 100 : 50;
+            document.getElementById('bar-michele').style.width = `${michelePct}%`;
+            document.getElementById('bar-irene').style.width = `${100 - michelePct}%`;
+
+            // CALCOLO SALDO
+            const micheleNet = michelePaid - micheleOwes; // Positivo = ha anticipato soldi
+            const ireneNet = irenePaid - ireneOwes;
+
+            const settlementText = document.getElementById('settlement-text');
+            const settlementDetail = document.getElementById('settlement-detail');
+
+            if (Math.abs(micheleNet) < 0.01) {
+                settlementText.innerText = "Tutto pari tra voi!";
+                settlementDetail.innerText = "Non ci sono crediti o debiti pendenti.";
+            } else if (micheleNet < 0) {
+                // Michele deve soldi a Irene
+                const amount = Math.abs(micheleNet).toFixed(2);
+                settlementText.innerText = `Michele deve €${amount} a Irene`;
+                settlementDetail.innerText = `Irene ha anticipato più spese comuni.`;
+            } else {
+                // Irene deve soldi a Michele
+                const amount = Math.abs(ireneNet).toFixed(2);
+                settlementText.innerText = `Irene deve €${amount} a Michele`;
+                settlementDetail.innerText = `Michele ha anticipato più spese comuni.`;
+            }
+
+            // LISTA SPESE
+            renderExpenseList(filteredExpenses);
+
+            // GRAFICO & SOMMARIO
+            renderChart(filteredExpenses);
+            renderAreaSummary(filteredExpenses);
+
+            lucide.createIcons();
+        }
+
+        // RENDER LISTA SPESE
+        function renderExpenseList(expenses) {
+            const listEl = document.getElementById('expenses-list');
+            document.getElementById('expense-count-badge').innerText = `${expenses.length} spese`;
+
+            if (expenses.length === 0) {
+                listEl.innerHTML = `
+                    <div class="p-8 text-center text-gray-400 dark:text-gray-500">
+                        <i data-lucide="inbox" class="w-12 h-12 mx-auto mb-2 opacity-50"></i>
+                        <p class="text-sm">Nessuna spesa registrata per questo periodo.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            listEl.innerHTML = expenses.sort((a, b) => new Date(b.date) - new Date(a.date)).map(e => {
+                const area = state.areas.find(a => a.id === e.areaId) || { name: 'Generale', color: '#6b7280' };
+                return `
+                    <div class="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-750 transition">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-3 h-10 rounded-full" style="background-color: ${area.color}"></div>
+                            <div>
+                                <h4 class="font-semibold text-gray-900 dark:text-white text-sm">${escapeHtml(e.description)}</h4>
+                                <div class="flex items-center gap-2 mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                    <span class="font-medium text-gray-700 dark:text-gray-300">${area.name}</span>
+                                    <span>•</span>
+                                    <span>${e.date}</span>
+                                    <span>•</span>
+                                    <span class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-medium">Pagato da ${e.payer}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center space-x-3">
+                            <div class="text-right">
+                                <span class="font-bold text-gray-900 dark:text-white text-base">€${parseFloat(e.amount).toFixed(2)}</span>
+                                <p class="text-xs text-gray-400">${e.split === '50-50' ? 'Diviso 50%' : e.split}</p>
+                            </div>
+                            <button onclick="deleteExpense('${e.id}')" class="text-gray-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // RENDER GRAFICO
+        function renderChart(expenses) {
+            const ctx = document.getElementById('areasChart').getContext('2d');
+
+            const areaTotals = {};
+            state.areas.forEach(a => areaTotals[a.id] = 0);
+
+            expenses.forEach(e => {
+                if (areaTotals[e.areaId] !== undefined) {
+                    areaTotals[e.areaId] += parseFloat(e.amount) || 0;
+                }
+            });
+
+            const labels = [];
+            const data = [];
+            const colors = [];
+
+            state.areas.forEach(a => {
+                if (areaTotals[a.id] > 0) {
+                    labels.push(a.name);
+                    data.push(areaTotals[a.id]);
+                    colors.push(a.color);
+                }
+            });
+
+            if (areasChartInstance) areasChartInstance.destroy();
+
+            areasChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: colors,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    cutout: '70%'
+                }
+            });
+        }
+
+        // RENDER SOMMARIO MICRO AREE
+        function renderAreaSummary(expenses) {
+            const listEl = document.getElementById('areas-summary-list');
+            const total = expenses.reduce((acc, e) => acc + (parseFloat(e.amount) || 0), 0);
+
+            listEl.innerHTML = state.areas.map(area => {
+                const areaSum = expenses.filter(e => e.areaId === area.id).reduce((acc, e) => acc + (parseFloat(e.amount) || 0), 0);
+                const pct = total > 0 ? ((areaSum / total) * 100).toFixed(0) : 0;
+
+                return `
+                    <div class="flex items-center justify-between text-xs p-2 rounded-lg bg-gray-50 dark:bg-gray-750">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${area.color}"></span>
+                            <span class="font-medium text-gray-700 dark:text-gray-300">${area.name}</span>
+                        </div>
+                        <div class="font-bold text-gray-900 dark:text-white">
+                            €${areaSum.toFixed(2)} <span class="text-gray-400 font-normal">(${pct}%)</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // MODALE E GESTIONE SPESA
+        function openExpenseModal() {
+            const selectArea = document.getElementById('expense-area');
+            selectArea.innerHTML = state.areas.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+            document.getElementById('expense-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('modal-expense').classList.remove('hidden');
+        }
+
+        function closeExpenseModal() {
+            document.getElementById('modal-expense').classList.add('hidden');
+            document.getElementById('form-expense').reset();
+        }
+
+        function handleSaveExpense(e) {
+            e.preventDefault();
+            const newExpense = {
+                id: 'exp-' + Date.now(),
+                description: document.getElementById('expense-desc').value.trim(),
+                amount: parseFloat(document.getElementById('expense-amount').value),
+                date: document.getElementById('expense-date').value,
+                areaId: document.getElementById('expense-area').value,
+                payer: document.getElementById('expense-payer').value,
+                split: document.getElementById('expense-split').value
+            };
+
+            state.expenses.push(newExpense);
+            saveLocalData();
+            populateMonthFilter();
+            renderApp();
+            closeExpenseModal();
+        }
+
+        function deleteExpense(id) {
+            if (confirm('Vuoi davvero eliminare questa spesa?')) {
+                state.expenses = state.expenses.filter(e => e.id !== id);
+                saveLocalData();
+                renderApp();
+            }
+        }
+
+        // MODALE E GESTIONE AREE
+        function openAreaModal() {
+            renderAreasManagementList();
+            document.getElementById('modal-areas').classList.remove('hidden');
+        }
+
+        function closeAreaModal() {
+            document.getElementById('modal-areas').classList.add('hidden');
+        }
+
+        function renderAreasManagementList() {
+            const listEl = document.getElementById('areas-management-list');
+            listEl.innerHTML = state.areas.map(area => `
+                <div class="flex items-center justify-between py-2">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-3 h-3 rounded-full" style="background-color: ${area.color}"></span>
+                        <span class="text-sm font-medium text-gray-800 dark:text-gray-200">${area.name}</span>
+                    </div>
+                    <button onclick="deleteArea('${area.id}')" class="text-gray-400 hover:text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function handleSaveArea(e) {
+            e.preventDefault();
+            const name = document.getElementById('area-name').value.trim();
+            const color = document.getElementById('area-color').value;
+
+            if (name) {
+                state.areas.push({
+                    id: 'area-' + Date.now(),
+                    name: name,
+                    color: color
+                });
+                saveLocalData();
+                renderAreasManagementList();
+                renderApp();
+                document.getElementById('area-name').value = '';
+            }
+        }
+
+        function deleteArea(id) {
+            if (state.areas.length <= 1) {
+                alert('Devi mantenere almeno una Micro-Area.');
+                return;
+            }
+            if (confirm('Vuoi eliminare questa Micro-Area?')) {
+                state.areas = state.areas.filter(a => a.id !== id);
+                saveLocalData();
+                renderAreasManagementList();
+                renderApp();
+            }
+        }
+
+        // UTILITY SYNC MODAL
+        function openSyncModal() {
+            if (state.firebaseConfig) {
+                document.getElementById('firebase-room').value = state.firebaseConfig.room || '';
+                document.getElementById('firebase-dburl').value = state.firebaseConfig.databaseURL || '';
+                document.getElementById('firebase-apikey').value = state.firebaseConfig.apiKey || '';
+            }
+            document.getElementById('modal-sync').classList.remove('hidden');
+        }
+
+        function closeSyncModal() {
+            document.getElementById('modal-sync').classList.add('hidden');
+        }
+
+        // ESPORTAZIONE CSV
+        function exportCSV() {
+            if (state.expenses.length === 0) {
+                alert('Nessuna spesa da esportare.');
+                return;
+            }
+
+            let csv = 'Data,Descrizione,Importo,Micro-Area,Pagato Da,Ripartizione\n';
+            state.expenses.forEach(e => {
+                const area = state.areas.find(a => a.id === e.areaId)?.name || 'Generale';
+                csv += `"${e.date}","${e.description.replace(/"/g, '""')}",${e.amount},"${area}","${e.payer}","${e.split}"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `CasaBudget_Michele_Irene_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/[&<>"']/g, function(m) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+            });
+        }
+    </script>
+</body>
+</html>
